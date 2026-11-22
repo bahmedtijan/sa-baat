@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sa Baat! Your Vote Is Your Voice</title>
+<title>Sa Baat! Find Your Presidential Match</title>
 <meta name="description" content="Compare your views with the manifestos of the nine presidential candidates.">
 <style>
 :root{--bg:#fff;--fg:#1a1d21;--mut:#5b6470;--card:#f3f5f7;--ac:#0b6e3c;--ac2:#fff;--bd:#d8dde3;--warn:#fff4d6;--warnfg:#5c4300}
@@ -34,6 +34,9 @@ let S=[];
 function shuffle(a){a=a.slice();for(let k=a.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a}
 
 const REV=C.filter(c=>c.reviewed),pos=(c,q)=>(P[c.id]||{})[q.id];
+const DW=(()=>{const W={};let tot=0;for(const q of Q){const v=REV.map(c=>{const p=pos(c,q);return p?p.v:0}),n=v.length||1,m=v.reduce((a,b)=>a+b,0)/n,sd=Math.sqrt(v.reduce((a,b)=>a+(b-m)*(b-m),0)/n);W[q.id]=sd;tot+=sd}
+const mean=tot/Q.length||1;for(const k in W)W[k]=D.weightByDistinctiveness===false?1:.3+W[k]/mean;return W})();
+function wpick(a){let t=0;const w=a.map(q=>{const x=DW[q.id]*DW[q.id];t+=x;return x});let r=Math.random()*t;for(let i=0;i<a.length;i++){r-=w[i];if(r<=0)return a[i]}return a[a.length-1]}
 const effT=()=>REV.length?Math.min(T0,...REV.map(c=>Q.filter(q=>pos(c,q)).length)):0;
 const stance=(it,p)=>it.flip?-p.v:p.v;
 function pickTopics(T){const cnt={},used=new Set(),chosen=[],stuck=new Set();REV.forEach(c=>cnt[c.id]=0);
@@ -41,27 +44,37 @@ for(;;){const need=REV.filter(c=>cnt[c.id]<T&&!stuck.has(c.id));if(!need.length)
 const m=Math.min(...need.map(c=>cnt[c.id])),c=shuffle(need.filter(d=>cnt[d.id]===m))[0];
 const opts=Q.filter(q=>!used.has(q.id)&&pos(c,q)&&REV.every(d=>!pos(d,q)||cnt[d.id]<T));
 if(!opts.length){stuck.add(c.id);continue}
-const q=opts[Math.floor(Math.random()*opts.length)];used.add(q.id);chosen.push(q);REV.forEach(d=>{if(pos(d,q))cnt[d.id]++})}
+const q=D.favourDistinctive===false?opts[Math.floor(Math.random()*opts.length)]:wpick(opts);used.add(q.id);chosen.push(q);REV.forEach(d=>{if(pos(d,q))cnt[d.id]++})}
 return polish(T,chosen)}
 function polish(T,chosen){const cov=Q.map(q=>REV.map((c,r)=>pos(c,q)?r:-1).filter(r=>r>=0)),K=Q.map((q,k)=>k).filter(k=>cov[k].length);
 const on=Q.map(q=>chosen.includes(q)),cnt=REV.map(()=>0);Q.forEach((q,k)=>{if(on[k])cov[k].forEach(r=>cnt[r]++)});
-let cost=cnt.reduce((a,x)=>a+(x-T)*(x-T),0),best=cost,bestOn=on.slice();
-for(let n=0;n<3000&&best>0;n++){const k=K[Math.floor(Math.random()*K.length)],d=on[k]?-1:1;let dl=0;for(const r of cov[k]){const a=cnt[r]-T;dl+=(a+d)*(a+d)-a*a}
-if(dl<=0||Math.random()<Math.exp(-dl/.5)){on[k]=!on[k];cov[k].forEach(r=>cnt[r]+=d);cost+=dl;if(cost<best){best=cost;bestOn=on.slice()}}}
-return{chosen:Q.filter((q,k)=>bestOn[k]),exact:best===0}}
-function flipCost(items){let t=0;for(const c of REV){let s=0;for(const it of items){const p=pos(c,it.q);if(p)s+=stance(it,p)}t+=s*s}return t}
+const bias=D.favourDistinctive!==false,MU=bias?.15:0,rw=k=>DW[Q[k].id]-1;
+let cost=cnt.reduce((a,x)=>a+(x-T)*(x-T),0),rew=0;Q.forEach((q,k)=>{if(on[k])rew+=rw(k)});
+let bestC=cost,bestR=rew,bestOn=on.slice();const N=30000,flip=(k,d)=>{on[k]=!on[k];cov[k].forEach(r=>cnt[r]+=d)};
+const delta=(k,d)=>{let dl=0;for(const r of cov[k]){const a=cnt[r]-T;dl+=(a+d)*(a+d)-a*a}return dl};
+const save=()=>{if(cost<bestC||(cost===bestC&&rew>bestR+1e-9)){bestC=cost;bestR=rew;bestOn=on.slice()}};
+for(let n=0;n<N;n++){if(bestC===0&&(!bias||n>N*.5))break;const temp=1.2*(1-n/N)+.05,k=K[Math.floor(Math.random()*K.length)],d=on[k]?-1:1,d1=delta(k,d);
+if(Math.random()<.4){flip(k,d);const k2=K[Math.floor(Math.random()*K.length)];if(k2===k){flip(k,-d);continue}const e=on[k2]?-1:1,dl=d1+delta(k2,e),dr=d*rw(k)+e*rw(k2),dE=dl-MU*dr;
+if(dE<=0||Math.random()<Math.exp(-dE/temp)){flip(k2,e);cost+=dl;rew+=dr;save()}else flip(k,-d)}
+else{const dr=d*rw(k),dE=d1-MU*dr;if(dE<=0||Math.random()<Math.exp(-dE/temp)){flip(k,d);cost+=d1;rew+=dr;save()}}}
+return{chosen:Q.filter((q,k)=>bestOn[k]),exact:bestC===0}}
+function flipCost(items){let t=0;for(const c of REV){let s=0;for(const it of items){const p=pos(c,it.q);if(p)s+=DW[it.q.id]*stance(it,p)}t+=s*s}return t}
 function balanceFlips(items){const fl=items.filter(it=>it.q.neg);shuffle(fl).forEach((it,k)=>it.flip=k<fl.length/2);
 let cost=flipCost(items);for(let n=0;n<30&&cost>0;n++){let ch=false;for(const it of shuffle(fl)){it.flip=!it.flip;const c2=flipCost(items);if(c2<cost){cost=c2;ch=true}else it.flip=!it.flip}if(!ch)break}return cost}
-function buildSession(){const T=effT();if(!T||D.equalCoverage===false){const items=shuffle(Q).slice(0,Math.min(D.quizLength||25,Q.length)).map(q=>({q,flip:false}));balanceFlips(items);return items}
-let best=null;for(let a=0;a<60;a++){const r=pickTopics(T),items=r.chosen.map(q=>({q,flip:false})),key=(r.exact?0:1000)+balanceFlips(items);
-if(!best||key<best.key)best={key,items};if(key===0)break}return shuffle(best.items)}
+function buildSession(){const T0e=effT();if(!T0e||D.equalCoverage===false){const items=shuffle(Q).slice(0,Math.min(D.quizLength||25,Q.length)).map(q=>({q,flip:false}));balanceFlips(items);return items}
+const lo=Math.min(25,T0e);let fallback=null;
+for(let T=T0e;T>=lo;T--){let best=null,extra=0;
+for(let a=0;a<40;a++){const r=pickTopics(T),items=r.chosen.map(q=>({q,flip:false})),key=(r.exact?0:1000)+balanceFlips(items);
+if(!best||key<best.key)best={key,items};if(key===0||(best.key<1000&&(best.key<1.5||++extra>=8)))break}
+if(best.key<1000)return shuffle(best.items);if(!fallback)fallback=best}
+return shuffle(fallback.items)}
 let i=0,ans={},wt={};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const banner=()=>{const n=C.filter(c=>c.reviewed).length;return D.status==="verified"&&n===C.length?"":`<p class="warn"><b>Work in progress.</b> ${n} of ${C.length} candidates' manifestos have been added so far. Candidates whose manifestos are not yet added cannot be matched.${D.status==="verified"?"":" Entries are awaiting a second check."}</p>`};
 const foot=`<p class="mut">Independent civic tool. Not affiliated with the IEC or any party. Positions come only from published manifestos; each entry cites its section and page. Updated ${esc(D.updated)}.</p>`;
 
-function intro(){app.innerHTML=`<h1>Sa Baat!</h1><h2 style="margin:.1em 0 .3em">Your Vote Is Your Voice</h2><p class="mut">${esc(D.election)}</p>
-${banner()}<div class="card"><p>You will get a personalised set of statements drawn from a pool of ${Q.length}. ${D.equalCoverage===false?"":`The set is built so every candidate's manifesto addresses the same number of them (${effT()} each).`} About half are worded in the negative, so agreeing with everything favours no one. We compare your answers with what the nine candidates' manifestos say. It takes about 5 minutes, and nothing you enter leaves your phone.</p>
+function intro(){app.innerHTML=`<h1>Sa Baat!</h1><h2 style="margin:.1em 0 .3em">Find Your Presidential Match</h2><p class="mut">${esc(D.election)}</p>
+${banner()}<div class="card"><p>You will get a personalised set of statements drawn from a pool of ${Q.length}. ${D.equalCoverage===false?"":`The set is built so every candidate's manifesto addresses the same number of them (at least ${Math.min(25,effT())} each).`} About half are worded in the negative, so agreeing with everything favours no one. We compare your answers with what the candidates' manifestos say. It takes about 5 minutes, and nothing you enter leaves your phone.</p>
 <button class="p" onclick="start()">Start</button></div>${foot}`}
 function start(){i=0;ans={};wt={};S=buildSession();ask()}
 function ask(){const it=S[i],q=it.q,a=ans[q.id];
@@ -75,21 +88,21 @@ function skip(){delete ans[S[i].q.id];next()}
 function back(){if(i>0){i--;ask()}}
 function next(){if(++i>=S.length)results();else ask()}
 function score(c){let raw=0,mx=0,agree=0,clash=0,silent=0;
-for(const it of S){const q=it.q,a=ans[q.id];if(a===undefined||a===0)continue;const w=wt[q.id]?2:1,p=pos(c,q),s=p?stance(it,p):0;mx+=w;raw+=w*a*s;if(s===0)silent++;else if(a*s>0)agree++;else clash++}
-return{pct:mx?Math.round(raw/mx*100):null,raw,mx,agree,clash,silent}}
+for(const it of S){const q=it.q,a=ans[q.id];if(a===undefined||a===0)continue;const w=DW[q.id]*(wt[q.id]?2:1),p=pos(c,q),s=p?stance(it,p):0;mx+=w;raw+=w*a*s;if(s===0)silent++;else if(a*s>0)agree++;else clash++}
+return{pct:mx?Math.round(raw/mx*100):null,agree,clash,silent}}
 function results(){const R=C.map(c=>c.reviewed?{c,...score(c)}:{c,pct:null});
 R.sort((a,b)=>(b.pct??-999)-(a.pct??-999));
 const taken=S.filter(it=>ans[it.q.id]!==undefined&&ans[it.q.id]!==0).length,extra=S.filter(it=>wt[it.q.id]&&ans[it.q.id]).length;
 app.innerHTML=`<h1>Your results</h1>${banner()}
-<p class="mut">You took a side on ${taken} of ${S.length} statements. For each one, a candidate scores <b>+1</b> if their manifesto takes your side, <b>−1</b> if it takes the opposite side, and <b>0</b> if it does not address the issue. “Matters extra” counts double.${extra?` You marked <b>${extra}</b> statement${extra>1?"s":""} (★ below) as mattering extra, so ${extra>1?"they are":"it is"} worth 2 points each, and this is why candidates with the same counts can have different scores.`:""} The percentage is the total as a share of the maximum possible: 100% means they matched you on every statement, 0% means agreements and disagreements cancel out (or nothing was addressed), and below 0% means they mostly took the opposite side.</p>
+<p class="mut">You took a side on ${taken} of ${S.length} statements. For each one, a candidate scores <b>+1</b> if their manifesto takes your side, <b>−1</b> if it takes the opposite side, and <b>0</b> if it does not address the issue. Statements that set the candidates apart count for more than ones they all promise, and “matters extra” counts double.${extra?` You marked <b>${extra}</b> statement${extra>1?"s":""} (★ below) as mattering extra.`:""} Because of this weighting, candidates with the same counts can still score differently. The percentage is the weighted total as a share of the maximum possible: 100% means they matched you on every statement, 0% means agreements and disagreements cancel out (or nothing was addressed), and below 0% means they mostly took the opposite side.</p>
 ${R.map(r=>{const ok=r.pct!==null;return `<div class="card res"><div class="top"><span>${esc(r.c.name)} <span class="mut">${esc(r.c.party)}</span></span><span>${ok?(r.pct<0?"−"+Math.abs(r.pct):r.pct)+"%":"–"}</span></div>
 <div class="bar"><i style="width:${ok?Math.max(0,r.pct):0}%"></i></div>
-<p class="mut">${ok?`${r.agree} agreed · ${r.clash} disagreed · ${r.silent} not addressed<br><b>${r.raw} of ${r.mx} points</b>`:(r.c.reviewed?"Answer at least one statement with Agree or Disagree to see a score.":"Manifesto not yet added.")}${(r.c.links||[]).map(l=>` <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(" ·")}</p></div>`}).join("")}
+<p class="mut">${ok?`${r.agree} agreed · ${r.clash} disagreed · ${r.silent} not addressed`:(r.c.reviewed?"Answer at least one statement with Agree or Disagree to see a score.":"Manifesto not yet added.")}${(r.c.links||[]).map(l=>` <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(" ·")}</p></div>`}).join("")}
 <h2>Where they stand</h2>${detail()}
 <div class="row"><button class="p" onclick="start()">Retake</button><button onclick="share()">Copy link to site</button></div>${foot}`}
 function detail(){return S.map(it=>{const q=it.q,a=ans[q.id],L={1:"Agree",0:"Neutral","-1":"Disagree"};
 const rows=C.map(c=>{const p=(P[c.id]||{})[q.id];return `<tr><td>${esc(c.name)}</td><td>${p?L[stance(it,p)]:`<span class="mut">${c.reviewed?"Not addressed":"Not yet added"}</span>`}</td><td>${p?`${it.flip?"Manifesto position: ":""}${esc(p.note||"")} <span class="mut">(${esc(p.src)})</span>`:""}</td></tr>`}).join("");
-return `<details><summary>${wt[q.id]?"★ ":""}${esc(it.flip?q.neg:q.text)}</summary><p class="mut">You: ${a===undefined?"skipped":L[a]}</p><table>${rows}</table></details>`}).join("")}
+return `<details><summary>${wt[q.id]?"★ ":""}${esc(it.flip?q.neg:q.text)}</summary><p class="mut">You: ${a===undefined?"skipped":L[a]}${DW[q.id]>=1.4?" · counts extra: candidates differ here":DW[q.id]<=.7?" · counts less: candidates mostly agree":""}</p><table>${rows}</table></details>`}).join("")}
 function share(){const u=location.href.split("#")[0];(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>alert("Link copied"),()=>prompt("Copy this link:",u))}
 intro();
 </script></body></html>
