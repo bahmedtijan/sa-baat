@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sa Baat! Your Vote Is Your Voice</title>
+<meta name="description" content="Compare your views with the manifestos of the nine presidential candidates.">
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5b6470;--card:#f3f5f7;--ac:#0b6e3c;--ac2:#fff;--bd:#d8dde3;--warn:#fff4d6;--warnfg:#5c4300}
+@media(prefers-color-scheme:dark){:root{--bg:#121518;--fg:#eceff2;--mut:#9aa4af;--card:#1c2127;--ac:#3fb67a;--ac2:#0b1a12;--bd:#2d343c;--warn:#3a3012;--warnfg:#f2d98a}}
+*{box-sizing:border-box}body{margin:0;font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.6rem;margin:.2em 0}h2{font-size:1.25rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:12px 0}
+.warn{background:var(--warn);color:var(--warnfg);border-radius:8px;padding:10px 12px;font-size:.9rem}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);padding:12px 14px;min-height:48px}
+button.p{background:var(--ac);color:var(--ac2);border-color:var(--ac);font-weight:600}
+button.sel{outline:3px solid var(--ac)}
+.opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--ac)}
+.mut{color:var(--mut);font-size:.9rem}
+.res{margin:10px 0}.res .top{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+details{margin-top:6px}summary{cursor:pointer;color:var(--ac)}
+td,th{padding:6px 4px;border-bottom:1px solid var(--bd);text-align:left;font-size:.9rem;vertical-align:top}
+table{width:100%;border-collapse:collapse}a{color:var(--ac)}
+label.w{display:flex;gap:8px;align-items:center;font-size:.95rem}
+input[type=checkbox]{width:22px;height:22px}
+</style></head><body><main id="app"></main>
+<script src="data.js"></script>
+<script>
+const app=document.getElementById("app");
+if(!window.DATA){app.innerHTML="<h1>Data file not found</h1><p>Could not load <b>data.js</b>. Make sure <b>data.js</b> is in the same folder as <b>index.html</b> and has exactly that name (no \"(1)\" or other extra characters).</p>";throw new Error("data.js missing")}
+const D=window.DATA,Q=D.questions,C=D.candidates,P=D.positions,T0=D.statementsPerCandidate||10;
+let S=[];
+function shuffle(a){a=a.slice();for(let k=a.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[a[k],a[j]]=[a[j],a[k]]}return a}
+
+const REV=C.filter(c=>c.reviewed),pos=(c,q)=>(P[c.id]||{})[q.id];
+const effT=()=>REV.length?Math.min(T0,...REV.map(c=>Q.filter(q=>pos(c,q)).length)):0;
+const stance=(it,p)=>it.flip?-p.v:p.v;
+function pickTopics(T){const cnt={},used=new Set(),chosen=[],stuck=new Set();REV.forEach(c=>cnt[c.id]=0);
+for(;;){const need=REV.filter(c=>cnt[c.id]<T&&!stuck.has(c.id));if(!need.length)break;
+const m=Math.min(...need.map(c=>cnt[c.id])),c=shuffle(need.filter(d=>cnt[d.id]===m))[0];
+const opts=Q.filter(q=>!used.has(q.id)&&pos(c,q)&&REV.every(d=>!pos(d,q)||cnt[d.id]<T));
+if(!opts.length){stuck.add(c.id);continue}
+const q=opts[Math.floor(Math.random()*opts.length)];used.add(q.id);chosen.push(q);REV.forEach(d=>{if(pos(d,q))cnt[d.id]++})}
+return polish(T,chosen)}
+function polish(T,chosen){const cov=Q.map(q=>REV.map((c,r)=>pos(c,q)?r:-1).filter(r=>r>=0)),K=Q.map((q,k)=>k).filter(k=>cov[k].length);
+const on=Q.map(q=>chosen.includes(q)),cnt=REV.map(()=>0);Q.forEach((q,k)=>{if(on[k])cov[k].forEach(r=>cnt[r]++)});
+let cost=cnt.reduce((a,x)=>a+(x-T)*(x-T),0),best=cost,bestOn=on.slice();
+for(let n=0;n<3000&&best>0;n++){const k=K[Math.floor(Math.random()*K.length)],d=on[k]?-1:1;let dl=0;for(const r of cov[k]){const a=cnt[r]-T;dl+=(a+d)*(a+d)-a*a}
+if(dl<=0||Math.random()<Math.exp(-dl/.5)){on[k]=!on[k];cov[k].forEach(r=>cnt[r]+=d);cost+=dl;if(cost<best){best=cost;bestOn=on.slice()}}}
+return{chosen:Q.filter((q,k)=>bestOn[k]),exact:best===0}}
+function flipCost(items){let t=0;for(const c of REV){let s=0;for(const it of items){const p=pos(c,it.q);if(p)s+=stance(it,p)}t+=s*s}return t}
+function balanceFlips(items){const fl=items.filter(it=>it.q.neg);shuffle(fl).forEach((it,k)=>it.flip=k<fl.length/2);
+let cost=flipCost(items);for(let n=0;n<30&&cost>0;n++){let ch=false;for(const it of shuffle(fl)){it.flip=!it.flip;const c2=flipCost(items);if(c2<cost){cost=c2;ch=true}else it.flip=!it.flip}if(!ch)break}return cost}
+function buildSession(){const T=effT();if(!T||D.equalCoverage===false){const items=shuffle(Q).slice(0,Math.min(D.quizLength||25,Q.length)).map(q=>({q,flip:false}));balanceFlips(items);return items}
+let best=null;for(let a=0;a<60;a++){const r=pickTopics(T),items=r.chosen.map(q=>({q,flip:false})),key=(r.exact?0:1000)+balanceFlips(items);
+if(!best||key<best.key)best={key,items};if(key===0)break}return shuffle(best.items)}
+let i=0,ans={},wt={};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const banner=()=>{const n=C.filter(c=>c.reviewed).length;return D.status==="verified"&&n===C.length?"":`<p class="warn"><b>Work in progress.</b> ${n} of ${C.length} candidates' manifestos have been added so far. Candidates whose manifestos are not yet added cannot be matched.${D.status==="verified"?"":" Entries are awaiting a second check."}</p>`};
+const foot=`<p class="mut">Independent civic tool. Not affiliated with the IEC or any party. Positions come only from published manifestos; each entry cites its section and page. Updated ${esc(D.updated)}.</p>`;
+
+function intro(){app.innerHTML=`<h1>Sa Baat!</h1><h2 style="margin:.1em 0 .3em">Your Vote Is Your Voice</h2><p class="mut">${esc(D.election)}</p>
+${banner()}<div class="card"><p>You will get a personalised set of statements drawn from a pool of ${Q.length}. ${D.equalCoverage===false?"":`The set is built so every candidate's manifesto addresses the same number of them (${effT()} each).`} About half are worded in the negative, so agreeing with everything favours no one. We compare your answers with what the nine candidates' manifestos say. It takes about 5 minutes, and nothing you enter leaves your phone.</p>
+<button class="p" onclick="start()">Start</button></div>${foot}`}
+function start(){i=0;ans={};wt={};S=buildSession();ask()}
+function ask(){const it=S[i],q=it.q,a=ans[q.id];
+app.innerHTML=`<p class="mut">Statement ${i+1} of ${S.length}</p><div class="bar"><i style="width:${i/S.length*100}%"></i></div>
+<div class="card"><h2>${esc(it.flip?q.neg:q.text)}</h2>
+<div class="opts">${[[1,"Agree"],[0,"Neutral"],[-1,"Disagree"]].map(([v,l])=>`<button class="${a===v?"sel":""}" onclick="pick(${v})">${l}</button>`).join("")}</div>
+<label class="w"><input type="checkbox" ${wt[q.id]?"checked":""} onchange="wt['${q.id}']=this.checked"> This matters extra to me</label></div>
+<div class="row"><button onclick="back()" ${i?"":"disabled"}>Back</button><button onclick="skip()">Skip</button></div>`}
+function pick(v){ans[S[i].q.id]=v;next()}
+function skip(){delete ans[S[i].q.id];next()}
+function back(){if(i>0){i--;ask()}}
+function next(){if(++i>=S.length)results();else ask()}
+function score(c){let raw=0,mx=0,agree=0,clash=0,silent=0;
+for(const it of S){const q=it.q,a=ans[q.id];if(a===undefined||a===0)continue;const w=wt[q.id]?2:1,p=pos(c,q),s=p?stance(it,p):0;mx+=w;raw+=w*a*s;if(s===0)silent++;else if(a*s>0)agree++;else clash++}
+return{pct:mx?Math.round(raw/mx*100):null,raw,mx,agree,clash,silent}}
+function results(){const R=C.map(c=>c.reviewed?{c,...score(c)}:{c,pct:null});
+R.sort((a,b)=>(b.pct??-999)-(a.pct??-999));
+const taken=S.filter(it=>ans[it.q.id]!==undefined&&ans[it.q.id]!==0).length,extra=S.filter(it=>wt[it.q.id]&&ans[it.q.id]).length;
+app.innerHTML=`<h1>Your results</h1>${banner()}
+<p class="mut">You took a side on ${taken} of ${S.length} statements. For each one, a candidate scores <b>+1</b> if their manifesto takes your side, <b>−1</b> if it takes the opposite side, and <b>0</b> if it does not address the issue. “Matters extra” counts double.${extra?` You marked <b>${extra}</b> statement${extra>1?"s":""} (★ below) as mattering extra, so ${extra>1?"they are":"it is"} worth 2 points each, and this is why candidates with the same counts can have different scores.`:""} The percentage is the total as a share of the maximum possible: 100% means they matched you on every statement, 0% means agreements and disagreements cancel out (or nothing was addressed), and below 0% means they mostly took the opposite side.</p>
+${R.map(r=>{const ok=r.pct!==null;return `<div class="card res"><div class="top"><span>${esc(r.c.name)} <span class="mut">${esc(r.c.party)}</span></span><span>${ok?(r.pct<0?"−"+Math.abs(r.pct):r.pct)+"%":"–"}</span></div>
+<div class="bar"><i style="width:${ok?Math.max(0,r.pct):0}%"></i></div>
+<p class="mut">${ok?`${r.agree} agreed · ${r.clash} disagreed · ${r.silent} not addressed<br><b>${r.raw} of ${r.mx} points</b>`:(r.c.reviewed?"Answer at least one statement with Agree or Disagree to see a score.":"Manifesto not yet added.")}${(r.c.links||[]).map(l=>` <a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(" ·")}</p></div>`}).join("")}
+<h2>Where they stand</h2>${detail()}
+<div class="row"><button class="p" onclick="start()">Retake</button><button onclick="share()">Copy link to site</button></div>${foot}`}
+function detail(){return S.map(it=>{const q=it.q,a=ans[q.id],L={1:"Agree",0:"Neutral","-1":"Disagree"};
+const rows=C.map(c=>{const p=(P[c.id]||{})[q.id];return `<tr><td>${esc(c.name)}</td><td>${p?L[stance(it,p)]:`<span class="mut">${c.reviewed?"Not addressed":"Not yet added"}</span>`}</td><td>${p?`${it.flip?"Manifesto position: ":""}${esc(p.note||"")} <span class="mut">(${esc(p.src)})</span>`:""}</td></tr>`}).join("");
+return `<details><summary>${wt[q.id]?"★ ":""}${esc(it.flip?q.neg:q.text)}</summary><p class="mut">You: ${a===undefined?"skipped":L[a]}</p><table>${rows}</table></details>`}).join("")}
+function share(){const u=location.href.split("#")[0];(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>alert("Link copied"),()=>prompt("Copy this link:",u))}
+intro();
+</script></body></html>
